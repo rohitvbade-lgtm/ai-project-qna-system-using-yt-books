@@ -1,0 +1,62 @@
+[project]
+name = "general-knowledge-multi-agent-system"
+version = "0.1.0"
+description = "CLI-first general-purpose knowledge assistant built with LangGraph, local RAG, YouTube research, and LangSmith-ready tracing."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "alembic>=1.14.0",
+    "langchain>=0.3.0",
+    "langchain-community>=0.3.0",
+    "langchain-core>=0.3.0",
+    "langchain-mcp-adapters>=0.1.0",
+    "langchain-openai>=0.2.0",
+    "langgraph>=0.2.0",
+    "langsmith>=0.1.0",
+    "mcp>=1.0.0",
+    "fastmcp>=2.0.0",
+    "psycopg[binary]>=3.2.0",
+    "pydantic>=2.8.0",
+    "pydantic-settings>=2.4.0",
+    "pymupdf>=1.24.0",
+    "python-dotenv>=1.0.1",
+    "pyyaml>=6.0.2",
+    "rich>=13.9.0",
+    "sqlalchemy>=2.0.35",
+    "tiktoken>=0.7.0",
+    "typer>=0.12.5",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.0",
+    "ruff>=0.6.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.0",
+    "ruff>=0.6.0",
+]
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.setuptools.package-data]
+app = ["db/schema.sql", "evals/test_questions.yaml"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "N", "C4", "SIM"]
+ignore = ["B008"]

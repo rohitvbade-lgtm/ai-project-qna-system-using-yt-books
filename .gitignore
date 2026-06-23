@@ -1,0 +1,41 @@
+.env
+.venv
+*.egg-info/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+data/books/raw/*
+!data/books/raw/.gitkeep
+data/books/processed/*
+!data/books/processed/.gitkeep
+*.db
+.DS_Store
+
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Environment/secrets
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+
+# Local databases / vector stores
+*.sqlite3
+*.db
+data/
+chroma_db/
+.faiss/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
