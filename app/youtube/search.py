@@ -7,8 +7,10 @@ from urllib.parse import urlencode
 from urllib.request import urlopen
 
 from app.config import get_settings
+from app.runtime_logging import get_logger
 
 FIXTURE_PATH = Path("data/youtube_fixtures/search_results.json")
+logger = get_logger(__name__)
 
 
 class YouTubeSearchClient:
@@ -23,11 +25,16 @@ class YouTubeSearchClient:
     ) -> list[dict[str, Any]]:
         if self.settings.youtube_api_key:
             try:
+                logger.info("youtube-search: searching YouTube API")
                 return self._search_via_api(
                     query, max_results=max_results, require_captions=require_captions
                 )
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning(
+                    "youtube-search: API search failed, falling back to fixtures: %s",
+                    exc,
+                )
+        logger.info("youtube-search: searching local fixture data")
         return self._search_via_fixtures(
             query, max_results=max_results, require_captions=require_captions
         )
@@ -56,7 +63,7 @@ class YouTubeSearchClient:
             params["videoCaption"] = "closedCaption"
 
         url = "https://www.googleapis.com/youtube/v3/search?" + urlencode(params)
-        with urlopen(url) as response:
+        with urlopen(url, timeout=5) as response:
             payload = json.loads(response.read().decode("utf-8"))
 
         items: list[dict[str, Any]] = []
@@ -103,7 +110,9 @@ class YouTubeSearchClient:
             key=_score,
             reverse=True,
         )
-        return ranked[:max_results]
+        results = ranked[:max_results]
+        logger.info("youtube-search: fixture search returned %s videos", len(results))
+        return results
 
     def _load_fixture_items(self) -> list[dict[str, Any]]:
         if not FIXTURE_PATH.exists():

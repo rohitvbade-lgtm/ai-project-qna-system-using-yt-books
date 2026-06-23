@@ -8,7 +8,7 @@ from typing import Any
 
 from rich.console import Console
 from rich.table import Table
-from sqlalchemy import select
+from sqlalchemy import Select, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.config import get_settings
@@ -16,8 +16,10 @@ from app.db.models import Book, BookChunk
 from app.db.session import get_session
 from app.rag.citations import format_book_citation
 from app.rag.embeddings import get_embedding_provider
+from app.runtime_logging import configure_logging, get_logger
 
 console = Console()
+logger = get_logger(__name__)
 
 
 def _tokenize(text_value: str) -> list[str]:
@@ -73,22 +75,37 @@ def retrieve_book_chunks(
 ) -> list[dict[str, Any]]:
     settings = get_settings()
     effective_top_k = top_k or settings.retrieval_top_k
+    logger.info("retriever: running retrieval with top_k=%s", effective_top_k)
 
     def _run(active_session: Session) -> list[dict[str, Any]]:
-        statement = (
-            select(BookChunk)
-            .options(joinedload(BookChunk.book))
-            .join(BookChunk.book)
-            .order_by(BookChunk.created_at.asc())
+        provider = get_embedding_provider(allow_fake=False, require_real=False)
+        if provider and _supports_pgvector(active_session):
+            logger.info("retriever: using pgvector cosine search")
+            query_embedding = provider.embed_query(question)
+            vector_statement = (
+                _chunk_statement()
+                .where(BookChunk.embedding.is_not(None))
+                .order_by(BookChunk.embedding.cosine_distance(query_embedding))
+                .limit(effective_top_k)
+            )
+            vector_rows = list(active_session.scalars(vector_statement))
+            if vector_rows:
+                logger.info("retriever: pgvector returned %s chunks", len(vector_rows))
+                return _rows_to_payload(vector_rows)
+
+        all_chunks = list(
+            active_session.scalars(_chunk_statement().order_by(BookChunk.created_at.asc()))
         )
-        all_chunks = list(active_session.scalars(statement))
         if not all_chunks:
+            logger.info("retriever: no chunks are indexed in the library")
             return []
 
         chunks_with_embeddings = [chunk for chunk in all_chunks if chunk.embedding]
-        provider = get_embedding_provider(allow_fake=False, require_real=False)
-
         if provider and chunks_with_embeddings:
+            logger.info(
+                "retriever: using in-memory cosine ranking across %s chunks",
+                len(all_chunks),
+            )
             query_embedding = provider.embed_query(question)
             scored = sorted(
                 chunks_with_embeddings,
@@ -97,6 +114,7 @@ def retrieve_book_chunks(
             )
             return _rows_to_payload(scored[:effective_top_k])
 
+        logger.info("retriever: using keyword fallback ranking across %s chunks", len(all_chunks))
         scored = sorted(
             all_chunks,
             key=lambda chunk: _keyword_score(question, chunk.chunk_text),
@@ -109,6 +127,19 @@ def retrieve_book_chunks(
 
     with get_session() as managed_session:
         return _run(managed_session)
+
+
+def _chunk_statement() -> Select[tuple[BookChunk]]:
+    return (
+        select(BookChunk)
+        .options(joinedload(BookChunk.book))
+        .join(BookChunk.book)
+    )
+
+
+def _supports_pgvector(session: Session) -> bool:
+    bind = session.get_bind()
+    return bind is not None and bind.dialect.name == "postgresql"
 
 
 def get_book_chunk_by_id(chunk_id: str, session: Session | None = None) -> dict[str, Any] | None:
@@ -182,6 +213,7 @@ def _render_cli(question: str) -> int:
 
 
 if __name__ == "__main__":
+    configure_logging()
     if len(sys.argv) < 2:
         console.print('[red]Usage: uv run python -m app.rag.retriever "your question"[/red]')
         raise SystemExit(1)

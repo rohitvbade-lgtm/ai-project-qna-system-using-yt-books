@@ -8,6 +8,7 @@ langchain-openai>=0.2.0
 langgraph>=0.2.0
 langsmith>=0.1.0
 mcp>=1.0.0
+pgvector>=0.3.6
 psycopg[binary]>=3.2.0
 pydantic>=2.8.0
 pydantic-settings>=2.4.0

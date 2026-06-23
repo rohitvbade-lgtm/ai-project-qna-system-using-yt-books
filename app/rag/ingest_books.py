@@ -13,9 +13,11 @@ from app.db.models import Book, BookChunk
 from app.db.session import get_session
 from app.rag.chunking import PageChunk, chunk_pages, clean_text
 from app.rag.embeddings import MissingEmbeddingConfigurationError, get_embedding_provider
+from app.runtime_logging import configure_logging, get_logger
 
 console = Console()
 app = typer.Typer(help="Ingest PDF books and documents into the local knowledge base.")
+logger = get_logger(__name__)
 
 
 def _count_tokens(text_value: str) -> int:
@@ -35,6 +37,7 @@ def extract_pages_from_pdf(pdf_path: Path) -> list[tuple[int, str]]:
         raise RuntimeError("PyMuPDF is not installed. Install project dependencies first.") from exc
 
     document = fitz.open(pdf_path)
+    logger.info("ingest: reading PDF pages from %s", pdf_path.name)
     pages: list[tuple[int, str]] = []
     try:
         for page_index, page in enumerate(document, start=1):
@@ -55,6 +58,7 @@ def _upsert_book_and_chunks(
     embeddings: list[list[float]] | None,
 ) -> dict[str, Any]:
     title, author = _derive_book_metadata(pdf_path)
+    logger.info("ingest: storing %s with %s chunks", title, len(chunks))
 
     with get_session() as session:
         existing = session.scalar(select(Book).where(Book.file_name == pdf_path.name))
@@ -91,12 +95,15 @@ def _upsert_book_and_chunks(
 
 def ingest_pdf(pdf_path: Path) -> dict[str, Any]:
     settings = get_settings()
+    logger.info("ingest: processing %s", pdf_path.name)
     pages = extract_pages_from_pdf(pdf_path)
+    logger.info("ingest: extracted %s pages", len(pages))
     chunks = chunk_pages(
         pages,
         chunk_size=settings.chunk_size,
         overlap=settings.chunk_overlap,
     )
+    logger.info("ingest: created %s chunks", len(chunks))
 
     if not chunks:
         return {
@@ -110,8 +117,10 @@ def ingest_pdf(pdf_path: Path) -> dict[str, Any]:
     warning: str | None = None
 
     if provider is not None:
+        logger.info("ingest: generating embeddings for %s chunks", len(chunks))
         embeddings = provider.embed_texts([chunk.text for chunk in chunks])
     else:
+        logger.info("ingest: no embedding provider enabled; storing chunks without embeddings")
         warning = (
             "No embedding provider is enabled. Stored chunks without embeddings; "
             "retrieval will use keyword fallback."
@@ -129,19 +138,23 @@ def ingest_books_directory(raw_dir: Path | None = None) -> list[dict[str, Any]]:
         raw_directory.mkdir(parents=True, exist_ok=True)
         return []
 
+    logger.info("ingest: scanning %s for PDF files", raw_directory)
     results: list[dict[str, Any]] = []
     for pdf_path in sorted(raw_directory.glob("*.pdf")):
         try:
             results.append(ingest_pdf(pdf_path))
         except MissingEmbeddingConfigurationError as exc:
+            logger.exception("ingest: embedding configuration failed for %s", pdf_path.name)
             results.append({"file_name": pdf_path.name, "chunks_indexed": 0, "error": str(exc)})
         except Exception as exc:  # pragma: no cover - integration failure path
+            logger.exception("ingest: ingestion failed for %s", pdf_path.name)
             results.append({"file_name": pdf_path.name, "chunks_indexed": 0, "error": str(exc)})
     return results
 
 
 @app.command("run")
 def ingest_books_cli() -> None:
+    configure_logging()
     results = ingest_books_directory()
     if not results:
         console.print("[yellow]No PDF files found in data/books/raw.[/yellow]")

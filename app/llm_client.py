@@ -3,6 +3,9 @@ from __future__ import annotations
 from typing import Any
 
 from app.config import get_settings
+from app.runtime_logging import get_logger
+
+logger = get_logger(__name__)
 
 
 class MissingLLMConfigurationError(RuntimeError):
@@ -30,6 +33,11 @@ def generate_text(*, system_prompt: str | None, user_prompt: str) -> str:
             "No LLM provider is configured. Set LLM_PROVIDER and related settings first."
         )
 
+    logger.info(
+        "llm: requesting completion from provider=%s model=%s",
+        settings.llm_provider,
+        settings.llm_model,
+    )
     client = build_openai_compatible_client(
         api_key=settings.resolved_llm_api_key,
         base_url=settings.resolved_llm_base_url,
@@ -44,5 +52,6 @@ def generate_text(*, system_prompt: str | None, user_prompt: str) -> str:
         messages=messages,
         temperature=settings.llm_temperature,
     )
+    logger.info("llm: completion received")
     content = response.choices[0].message.content
     return str(content or "").strip()

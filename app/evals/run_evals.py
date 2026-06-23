@@ -16,8 +16,10 @@ from app.evals.graders import (
     route_accuracy,
 )
 from app.graph.supervisor_graph import run_supervisor
+from app.runtime_logging import get_logger
 
 console = Console()
+logger = get_logger(__name__)
 
 
 def _maybe_log_langsmith(results: list[dict[str, Any]]) -> str:
@@ -50,8 +52,10 @@ def run_local_evals() -> dict[str, Any]:
     if not dataset:
         return {"error": "No evaluation dataset found.", "results": []}
 
+    logger.info("eval: running %s evaluation questions", len(dataset))
     results: list[dict[str, Any]] = []
-    for item in dataset:
+    for index, item in enumerate(dataset, start=1):
+        logger.info("eval: question %s/%s", index, len(dataset))
         state = run_supervisor(item["question"])
         final_answer = state.get("final_answer", "") or ""
         llm_grade = optional_llm_judge(final_answer)
@@ -89,6 +93,7 @@ def run_local_evals() -> dict[str, Any]:
         "retry_rate": round(mean(item["retry_used"] for item in results), 2),
         "langsmith": _maybe_log_langsmith(results),
     }
+    logger.info("eval: evaluation run complete")
     return {"summary": summary, "results": results}
 
 

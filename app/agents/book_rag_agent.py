@@ -7,12 +7,16 @@ from app.graph.prompts import BOOK_AGENT_PROMPT
 from app.graph.state import AgentAnswer
 from app.llm_client import MissingLLMConfigurationError, generate_text
 from app.rag.retriever import retrieve_book_chunks
+from app.runtime_logging import get_logger
+
+logger = get_logger(__name__)
 
 
 def _build_fallback_answer(
     question: str, chunks: list[dict], retry_instruction: str | None
 ) -> AgentAnswer:
     if not chunks:
+        logger.info("books: no retrieved chunks available; returning fallback answer")
         return AgentAnswer(
             agent_name="book_rag_agent",
             answer=(
@@ -54,6 +58,7 @@ def _build_llm_answer(
     question: str, chunks: list[dict], retry_instruction: str | None
 ) -> AgentAnswer:
     try:
+        logger.info("books: synthesizing answer with configured LLM")
         context = "\n\n".join(
             f"{item['citation']['label']}\n{item['chunk_text']}" for item in chunks[:4]
         )
@@ -66,6 +71,7 @@ def _build_llm_answer(
             ),
         )
     except MissingLLMConfigurationError:
+        logger.info("books: LLM unavailable; switching to deterministic fallback")
         return _build_fallback_answer(question, chunks, retry_instruction)
 
     citations = [item["citation"] for item in chunks[:4]]
@@ -80,8 +86,11 @@ def _build_llm_answer(
 
 
 def run_book_rag_agent(question: str, retry_instruction: str | None = None) -> AgentAnswer:
+    logger.info("books: retrieving supporting book chunks")
     chunks = retrieve_book_chunks(question)
+    logger.info("books: retrieved %s candidate chunks", len(chunks))
     settings = get_settings()
     if not settings.llm_enabled:
+        logger.info("books: LLM disabled; using deterministic book summary")
         return _build_fallback_answer(question, chunks, retry_instruction)
     return _build_llm_answer(question, chunks, retry_instruction)

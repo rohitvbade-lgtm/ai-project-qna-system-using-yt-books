@@ -18,6 +18,9 @@ from app.graph.nodes import (
     youtube_agent_node,
 )
 from app.graph.state import MusicResearchState
+from app.runtime_logging import get_logger
+
+logger = get_logger(__name__)
 
 try:
     from langgraph.graph import END, START, StateGraph
@@ -30,6 +33,7 @@ except ImportError:  # pragma: no cover - dependency failure
 @dataclass
 class FallbackCompiledGraph:
     def invoke(self, initial_state: MusicResearchState) -> MusicResearchState:
+        logger.info("graph: LangGraph unavailable, using fallback graph path")
         state = supervisor_router_node(initial_state)
         next_node = route_after_supervisor(state)
 
@@ -55,8 +59,10 @@ class FallbackCompiledGraph:
 
 def build_supervisor_graph() -> Any:
     if StateGraph is None:
+        logger.info("graph: compiling fallback supervisor graph")
         return FallbackCompiledGraph()
 
+    logger.info("graph: compiling LangGraph supervisor graph")
     workflow = StateGraph(MusicResearchState)
     workflow.add_node("supervisor_router_node", supervisor_router_node)
     workflow.add_node("book_agent_node", book_agent_node)
@@ -109,11 +115,18 @@ def build_supervisor_graph() -> Any:
 
 def run_supervisor(question: str) -> MusicResearchState:
     get_settings().apply_runtime_environment()
+    logger.info("graph: starting supervisor run for question: %s", question)
     graph = build_supervisor_graph()
-    return graph.invoke(
+    state = graph.invoke(
         {
             "user_question": question,
             "retry_count": 0,
             "errors": [],
         }
     )
+    logger.info(
+        "graph: supervisor run complete: route=%s retries=%s",
+        state.get("route_decision"),
+        state.get("retry_count", 0),
+    )
+    return state

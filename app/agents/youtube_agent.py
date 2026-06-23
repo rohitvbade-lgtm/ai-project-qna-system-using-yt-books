@@ -7,9 +7,12 @@ from app.graph.prompts import YOUTUBE_AGENT_PROMPT
 from app.graph.state import AgentAnswer
 from app.llm_client import MissingLLMConfigurationError, generate_text
 from app.rag.citations import normalize_citation
+from app.runtime_logging import get_logger
 from app.youtube.ranking import rank_videos_for_question
 from app.youtube.search import YouTubeSearchClient
 from app.youtube.transcripts import get_transcript
+
+logger = get_logger(__name__)
 
 
 def _video_citation(video: dict) -> dict:
@@ -27,6 +30,7 @@ def _fallback_answer(
     question: str, ranked_items: list[dict], retry_instruction: str | None
 ) -> AgentAnswer:
     if not ranked_items:
+        logger.info("youtube: no ranked items available; returning fallback answer")
         return AgentAnswer(
             agent_name="youtube_agent",
             answer=(
@@ -93,6 +97,7 @@ def _llm_answer(
     question: str, ranked_items: list[dict], retry_instruction: str | None
 ) -> AgentAnswer:
     try:
+        logger.info("youtube: synthesizing answer with configured LLM")
         evidence_blocks = []
         citations: list[dict] = []
         for item in ranked_items[:4]:
@@ -118,6 +123,7 @@ def _llm_answer(
             ),
         )
     except MissingLLMConfigurationError:
+        logger.info("youtube: LLM unavailable; switching to deterministic fallback")
         return _fallback_answer(question, ranked_items, retry_instruction)
 
     limitations = []
@@ -139,10 +145,23 @@ def _llm_answer(
 
 def run_youtube_agent(question: str, retry_instruction: str | None = None) -> AgentAnswer:
     client = YouTubeSearchClient()
+    logger.info("youtube: searching for relevant videos")
     videos = client.search_videos(question)
+    logger.info("youtube: found %s candidate videos", len(videos))
+    logger.info("youtube: collecting transcripts and metadata evidence")
     transcripts = {video["video_id"]: get_transcript(video["video_id"]) for video in videos}
+    available_transcripts = sum(
+        1 for transcript in transcripts.values() if transcript.get("status") == "available"
+    )
+    logger.info(
+        "youtube: retrieved %s available transcripts out of %s videos",
+        available_transcripts,
+        len(videos),
+    )
     ranked_items = rank_videos_for_question(question, videos, transcripts)
+    logger.info("youtube: ranked %s evidence candidates", len(ranked_items))
     settings = get_settings()
     if not settings.llm_enabled:
+        logger.info("youtube: LLM disabled; using deterministic YouTube summary")
         return _fallback_answer(question, ranked_items, retry_instruction)
     return _llm_answer(question, ranked_items, retry_instruction)

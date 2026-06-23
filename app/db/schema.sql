@@ -1,3 +1,5 @@
+CREATE EXTENSION IF NOT EXISTS vector;
+
 CREATE TABLE IF NOT EXISTS books (
     id UUID PRIMARY KEY,
     title TEXT NOT NULL,
@@ -15,9 +17,12 @@ CREATE TABLE IF NOT EXISTS book_chunks (
     page_end INT NULL,
     chunk_text TEXT NOT NULL,
     token_count INT NULL,
-    embedding JSONB NULL,
+    embedding VECTOR(768) NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS idx_book_chunks_book_id ON book_chunks(book_id);
 CREATE INDEX IF NOT EXISTS idx_book_chunks_chunk_index ON book_chunks(chunk_index);
+CREATE INDEX IF NOT EXISTS idx_book_chunks_embedding_hnsw
+    ON book_chunks
+    USING hnsw (embedding vector_cosine_ops);

@@ -11,14 +11,17 @@ from app.agents.youtube_agent import run_youtube_agent
 from app.evals.run_evals import render_eval_report, run_local_evals
 from app.graph.supervisor_graph import run_supervisor
 from app.rag.ingest_books import ingest_books_directory
+from app.runtime_logging import configure_logging, get_logger
 
 app = typer.Typer(help="General-Purpose Knowledge Assistant CLI")
 console = Console()
+logger = get_logger(__name__)
 
 
 def _prepare_runtime() -> None:
     from app.config import get_settings
 
+    configure_logging()
     get_settings().apply_runtime_environment()
 
 
@@ -39,6 +42,7 @@ def _render_agent_answer(title: str, payload) -> None:
 @app.command("ask")
 def ask(question: str) -> None:
     _prepare_runtime()
+    logger.info("cli: running supervisor workflow")
     state = run_supervisor(question)
     console.print(
         Panel.fit(state.get("final_answer", "No answer generated."), title="Supervisor Answer")
@@ -51,6 +55,7 @@ def ask(question: str) -> None:
 
 def _ask_library(question: str) -> None:
     _prepare_runtime()
+    logger.info("cli: running local-library workflow")
     answer = run_book_rag_agent(question)
     _render_agent_answer("Local Library Agent", answer)
 
@@ -68,12 +73,14 @@ def ask_library(question: str) -> None:
 @app.command("ask-youtube")
 def ask_youtube(question: str) -> None:
     _prepare_runtime()
+    logger.info("cli: running YouTube workflow")
     answer = run_youtube_agent(question)
     _render_agent_answer("YouTube Agent", answer)
 
 
 def _ingest_library() -> None:
     _prepare_runtime()
+    logger.info("cli: starting library ingestion")
     results = ingest_books_directory(Path("data/books/raw"))
     if not results:
         console.print("[yellow]No PDF files found in data/books/raw.[/yellow]")
@@ -100,6 +107,7 @@ def ingest_library() -> None:
 @app.command("eval")
 def eval_command() -> None:
     _prepare_runtime()
+    logger.info("cli: running evaluation suite")
     render_eval_report(run_local_evals())
 
 

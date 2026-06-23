@@ -2,28 +2,20 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Any
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, Uuid, func
-from sqlalchemy.dialects.postgresql import JSONB
+from pgvector.sqlalchemy import Vector
+from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text, Uuid, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
-from sqlalchemy.types import JSON, TypeDecorator
+
+from app.config import get_settings
 
 
 class Base(DeclarativeBase):
     """Base declarative model."""
 
 
-class EmbeddingPayload(TypeDecorator[list[float] | None]):
-    """Store embeddings in JSON so local models can use any output dimension."""
-
-    cache_ok = True
-    impl = JSON
-
-    def load_dialect_impl(self, dialect: Any) -> Any:
-        if dialect.name == "postgresql":
-            return dialect.type_descriptor(JSONB())
-        return dialect.type_descriptor(JSON())
+EMBEDDING_DIMENSION = get_settings().embedding_dimension
+EMBEDDING_COLUMN_TYPE = Vector(EMBEDDING_DIMENSION).with_variant(JSON(), "sqlite")
 
 
 class Book(Base):
@@ -60,7 +52,7 @@ class BookChunk(Base):
     page_end: Mapped[int | None] = mapped_column(Integer, nullable=True)
     chunk_text: Mapped[str] = mapped_column(Text, nullable=False)
     token_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    embedding: Mapped[list[float] | None] = mapped_column(EmbeddingPayload(), nullable=True)
+    embedding: Mapped[list[float] | None] = mapped_column(EMBEDDING_COLUMN_TYPE, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=False),
         nullable=False,
