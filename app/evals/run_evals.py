@@ -102,7 +102,7 @@ def render_eval_report(report: dict[str, Any]) -> None:
         console.print(f"[red]{report['error']}[/red]")
         return
 
-    table = Table(title="Music Agent Evaluation Summary")
+    table = Table(title="General Agent Evaluation Summary")
     table.add_column("Metric")
     table.add_column("Value")
     for key, value in report["summary"].items():

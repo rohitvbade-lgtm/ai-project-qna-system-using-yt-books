@@ -17,7 +17,7 @@ from app.graph.nodes import (
     synthesis_node,
     youtube_agent_node,
 )
-from app.graph.state import MusicResearchState
+from app.graph.state import GeneralResearchState
 from app.runtime_logging import get_logger
 
 logger = get_logger(__name__)
@@ -32,7 +32,7 @@ except ImportError:  # pragma: no cover - dependency failure
 
 @dataclass
 class FallbackCompiledGraph:
-    def invoke(self, initial_state: MusicResearchState) -> MusicResearchState:
+    def invoke(self, initial_state: GeneralResearchState) -> GeneralResearchState:
         logger.info("graph: LangGraph unavailable, using fallback graph path")
         state = supervisor_router_node(initial_state)
         next_node = route_after_supervisor(state)
@@ -63,7 +63,7 @@ def build_supervisor_graph() -> Any:
         return FallbackCompiledGraph()
 
     logger.info("graph: compiling LangGraph supervisor graph")
-    workflow = StateGraph(MusicResearchState)
+    workflow = StateGraph(GeneralResearchState)
     workflow.add_node("supervisor_router_node", supervisor_router_node)
     workflow.add_node("book_agent_node", book_agent_node)
     workflow.add_node("youtube_agent_node", youtube_agent_node)
@@ -113,7 +113,7 @@ def build_supervisor_graph() -> Any:
     return workflow.compile()
 
 
-def run_supervisor(question: str) -> MusicResearchState:
+def run_supervisor(question: str) -> GeneralResearchState:
     get_settings().apply_runtime_environment()
     logger.info("graph: starting supervisor run for question: %s", question)
     graph = build_supervisor_graph()

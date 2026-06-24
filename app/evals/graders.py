@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.graph.state import MusicResearchState
+from app.graph.state import GeneralResearchState
 from app.llm_client import MissingLLMConfigurationError, generate_text
 
 
@@ -18,7 +18,7 @@ def answer_completeness(answer_text: str) -> float:
     return min(1.0, len(answer_text.split()) / 160)
 
 
-def groundedness_heuristic(state: MusicResearchState) -> float:
+def groundedness_heuristic(state: GeneralResearchState) -> float:
     citations = 0
     for key in ("book_answer", "youtube_answer"):
         answer = state.get(key)

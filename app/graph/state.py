@@ -34,7 +34,7 @@ class JudgeResult:
         return asdict(self)
 
 
-class MusicResearchState(TypedDict, total=False):
+class GeneralResearchState(TypedDict, total=False):
     user_question: str
     route_decision: Literal["youtube", "books", "both"]
     route_reason: str

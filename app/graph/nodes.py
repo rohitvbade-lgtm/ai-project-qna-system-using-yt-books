@@ -10,7 +10,7 @@ from app.agents.synthesis_agent import synthesize_final_answer
 from app.agents.youtube_agent import run_youtube_agent
 from app.config import get_settings
 from app.graph.prompts import SUPERVISOR_ROUTING_PROMPT
-from app.graph.state import JudgeResult, MusicResearchState
+from app.graph.state import JudgeResult, GeneralResearchState
 from app.llm_client import MissingLLMConfigurationError, generate_text
 from app.runtime_logging import get_logger
 
@@ -107,7 +107,7 @@ def _choose_route(question: str) -> tuple[str, str, list[str]]:
         )
 
 
-def supervisor_router_node(state: MusicResearchState) -> MusicResearchState:
+def supervisor_router_node(state: GeneralResearchState) -> GeneralResearchState:
     route_decision, route_reason, route_errors = _choose_route(state["user_question"])
     logger.info("router: selected route=%s (%s)", route_decision, route_reason)
     return {
@@ -119,7 +119,7 @@ def supervisor_router_node(state: MusicResearchState) -> MusicResearchState:
     }
 
 
-def book_agent_node(state: MusicResearchState) -> MusicResearchState:
+def book_agent_node(state: GeneralResearchState) -> GeneralResearchState:
     retry_instruction = None
     if state.get("retry_target") == "books" and state.get("book_judgement"):
         retry_instruction = state["book_judgement"].retry_instruction
@@ -132,7 +132,7 @@ def book_agent_node(state: MusicResearchState) -> MusicResearchState:
     return {**state, "book_answer": answer, "retry_target": None}
 
 
-def youtube_agent_node(state: MusicResearchState) -> MusicResearchState:
+def youtube_agent_node(state: GeneralResearchState) -> GeneralResearchState:
     retry_instruction = None
     if state.get("retry_target") == "youtube" and state.get("youtube_judgement"):
         retry_instruction = state["youtube_judgement"].retry_instruction
@@ -145,7 +145,7 @@ def youtube_agent_node(state: MusicResearchState) -> MusicResearchState:
     return {**state, "youtube_answer": answer, "retry_target": None}
 
 
-def judge_node(state: MusicResearchState) -> MusicResearchState:
+def judge_node(state: GeneralResearchState) -> GeneralResearchState:
     logger.info("judge: evaluating agent responses")
     updated_state = dict(state)
     if state.get("book_answer"):
@@ -170,7 +170,7 @@ def judge_node(state: MusicResearchState) -> MusicResearchState:
     return updated_state
 
 
-def _pick_retry_target(state: MusicResearchState) -> str | None:
+def _pick_retry_target(state: GeneralResearchState) -> str | None:
     candidates: list[tuple[str, JudgeResult]] = []
     if state.get("book_judgement") and not state["book_judgement"].passed:
         candidates.append(("books", state["book_judgement"]))
@@ -191,7 +191,7 @@ def _pick_retry_target(state: MusicResearchState) -> str | None:
     return min(candidates, key=lambda item: _score(item[1]))[0]
 
 
-def retry_router_node(state: MusicResearchState) -> MusicResearchState:
+def retry_router_node(state: GeneralResearchState) -> GeneralResearchState:
     target = _pick_retry_target(state)
     if target is None:
         logger.info("retry: no retry target selected")
@@ -208,7 +208,7 @@ def retry_router_node(state: MusicResearchState) -> MusicResearchState:
     }
 
 
-def synthesis_node(state: MusicResearchState) -> MusicResearchState:
+def synthesis_node(state: GeneralResearchState) -> GeneralResearchState:
     logger.info("synthesis: combining accepted evidence into final answer")
     final_answer = synthesize_final_answer(
         question=state["user_question"],
@@ -221,7 +221,7 @@ def synthesis_node(state: MusicResearchState) -> MusicResearchState:
     return {**state, "final_answer": final_answer}
 
 
-def route_after_supervisor(state: MusicResearchState) -> str:
+def route_after_supervisor(state: GeneralResearchState) -> str:
     if state["route_decision"] == "books":
         return "book_agent_node"
     if state["route_decision"] == "youtube":
@@ -229,17 +229,17 @@ def route_after_supervisor(state: MusicResearchState) -> str:
     return "book_agent_node"
 
 
-def route_after_book(state: MusicResearchState) -> str:
+def route_after_book(state: GeneralResearchState) -> str:
     if state.get("route_decision") == "both" and not state.get("youtube_answer"):
         return "youtube_agent_node"
     return "judge_node"
 
 
-def route_after_youtube(state: MusicResearchState) -> str:
+def route_after_youtube(state: GeneralResearchState) -> str:
     return "judge_node"
 
 
-def route_after_judge(state: MusicResearchState) -> str:
+def route_after_judge(state: GeneralResearchState) -> str:
     settings = get_settings()
     retry_target = _pick_retry_target(state)
     if retry_target and state.get("retry_count", 0) < settings.max_agent_retries:
@@ -247,7 +247,7 @@ def route_after_judge(state: MusicResearchState) -> str:
     return "synthesis_node"
 
 
-def route_after_retry(state: MusicResearchState) -> str:
+def route_after_retry(state: GeneralResearchState) -> str:
     if state.get("retry_target") == "books":
         return "book_agent_node"
     return "youtube_agent_node"
