@@ -65,6 +65,12 @@ Runtime flags derived from config:
 - `embeddings_enabled` is true only when a supported embedding provider and usable API key are present.
 - `langsmith_enabled` is true only when tracing is enabled and an API key exists.
 
+Current LLM provider behavior:
+
+- `ollama` uses `http://localhost:11434/v1` by default.
+- `groq` uses `https://api.groq.com/openai/v1` by default.
+- `openai` uses `LLM_BASE_URL` only when you explicitly set one.
+
 `app/main.py` calls `get_settings().apply_runtime_environment()` before running commands so LangSmith-related environment variables are exported for downstream tooling.
 
 ## 4. CLI Commands
@@ -408,9 +414,16 @@ Tracked fields include:
 
 ### 14.2 Routing Rules
 
-Current routing is heuristic, not LLM-based.
+Current routing is LLM-based when an LLM provider is configured.
 
-Rules:
+Primary behavior:
+
+- the supervisor prompts the configured LLM for a JSON `route_decision` and `route_reason`
+- the decision is normalized to one of `books`, `youtube`, or `both`
+- the prompt tells the model to route by semantic intent instead of raw keyword matching
+- if the routing call is unavailable or malformed, the supervisor falls back to deterministic rules
+
+Fallback rules:
 
 - mentions of `youtube`, `video`, `videos`, or `transcript` route toward `youtube`
 - mentions of `uploaded`, `book`, `books`, `document`, `pdf`, or `library` route toward `books`
@@ -562,7 +575,7 @@ The repository already does these things well:
 Important current limitations in the codebase:
 
 - the project is no longer narrowly music-specific in its implemented prompts and examples
-- routing is heuristic rather than LLM-based
+- supervisor routing falls back to heuristics when no routing LLM is configured or the routing JSON is invalid
 - retry guidance is generic, not source-specific
 - YouTube transcript retrieval depends on fixtures or `youtube_transcript_api`
 - synthesis still performs a second LLM call when LLM mode is enabled

@@ -1,17 +1,28 @@
 from __future__ import annotations
 
+import json
+
+from pydantic import BaseModel, ValidationError
+
 from app.agents.book_rag_agent import run_book_rag_agent
 from app.agents.judge_agent import judge_agent_answer
 from app.agents.synthesis_agent import synthesize_final_answer
 from app.agents.youtube_agent import run_youtube_agent
 from app.config import get_settings
+from app.graph.prompts import SUPERVISOR_ROUTING_PROMPT
 from app.graph.state import JudgeResult, MusicResearchState
+from app.llm_client import MissingLLMConfigurationError, generate_text
 from app.runtime_logging import get_logger
 
 logger = get_logger(__name__)
 
 
-def _choose_route(question: str) -> tuple[str, str]:
+class SupervisorRouteDecision(BaseModel):
+    route_decision: str
+    route_reason: str
+
+
+def _heuristic_choose_route(question: str) -> tuple[str, str]:
     lowered = question.lower()
     mentions_video = any(token in lowered for token in ("youtube", "video", "videos", "transcript"))
     mentions_library = any(
@@ -31,15 +42,80 @@ def _choose_route(question: str) -> tuple[str, str]:
     return "books", "Defaulting to the local library for a grounded knowledge answer."
 
 
+def _strip_json_fence(text: str) -> str:
+    cleaned = text.strip()
+    if cleaned.startswith("```"):
+        lines = cleaned.splitlines()
+        if lines and lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        cleaned = "\n".join(lines).strip()
+    return cleaned
+
+
+def _normalize_route_decision(route_decision: str) -> str:
+    normalized = route_decision.strip().lower()
+    if normalized in {"book", "books", "library", "rag"}:
+        return "books"
+    if normalized in {"youtube", "video", "videos"}:
+        return "youtube"
+    if normalized in {"both", "compare", "comparison"}:
+        return "both"
+    raise ValueError(f"Unsupported route decision returned by supervisor LLM: {route_decision}")
+
+
+def _llm_choose_route(question: str) -> tuple[str, str]:
+    response_text = generate_text(
+        system_prompt=SUPERVISOR_ROUTING_PROMPT,
+        user_prompt=(
+            f"Question: {question}\n\n"
+            "Return JSON only. Select the single best route_decision "
+            "and give a concise route_reason."
+        ),
+    )
+    payload = json.loads(_strip_json_fence(response_text))
+    decision = SupervisorRouteDecision.model_validate(payload)
+    route_decision = _normalize_route_decision(decision.route_decision)
+    route_reason = decision.route_reason.strip()
+    if not route_reason:
+        raise ValueError("Supervisor LLM returned an empty route_reason.")
+    return route_decision, route_reason
+
+
+def _choose_route(question: str) -> tuple[str, str, list[str]]:
+    settings = get_settings()
+    if not settings.llm_enabled:
+        route_decision, route_reason = _heuristic_choose_route(question)
+        return route_decision, route_reason, []
+
+    try:
+        route_decision, route_reason = _llm_choose_route(question)
+        return route_decision, route_reason, []
+    except (
+        MissingLLMConfigurationError,
+        ValidationError,
+        ValueError,
+        json.JSONDecodeError,
+    ) as exc:
+        logger.warning("router: LLM routing failed, using heuristic fallback: %s", exc)
+        route_decision, route_reason = _heuristic_choose_route(question)
+        return (
+            route_decision,
+            f"{route_reason} Supervisor LLM routing fallback applied.",
+            [f"Supervisor LLM routing fallback: {exc}"],
+        )
+
+
 def supervisor_router_node(state: MusicResearchState) -> MusicResearchState:
-    route_decision, route_reason = _choose_route(state["user_question"])
+    route_decision, route_reason, route_errors = _choose_route(state["user_question"])
     logger.info("router: selected route=%s (%s)", route_decision, route_reason)
     return {
         **state,
         "route_decision": route_decision,
         "route_reason": route_reason,
         "retry_count": state.get("retry_count", 0),
-        "errors": state.get("errors", []),
+        "errors": [*state.get("errors", []), *route_errors],
     }
 
 

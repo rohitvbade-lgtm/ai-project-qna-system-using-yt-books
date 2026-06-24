@@ -24,7 +24,7 @@ class Settings(BaseSettings):
         alias="DATABASE_URL",
     )
 
-    llm_provider: Literal["openai", "ollama", "none"] = Field(
+    llm_provider: Literal["openai", "ollama", "groq", "none"] = Field(
         default="none",
         alias="LLM_PROVIDER",
     )
@@ -73,6 +73,8 @@ class Settings(BaseSettings):
     def resolved_llm_base_url(self) -> str | None:
         if self.llm_provider == "ollama":
             return self.llm_base_url or "http://localhost:11434/v1"
+        if self.llm_provider == "groq":
+            return self.llm_base_url or "https://api.groq.com/openai/v1"
         return self.llm_base_url
 
     @property

@@ -1,1 +1,1 @@
-"""Music Knowledge Multi-Agent System."""
+"""General Knowledge Multi-Agent System."""

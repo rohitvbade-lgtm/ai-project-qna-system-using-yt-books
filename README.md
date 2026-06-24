@@ -4,7 +4,7 @@ CLI-first knowledge assistant that combines a local PDF library, optional YouTub
 
 ## What It Does
 
-A user asks a question in the CLI. A supervisor routes the request to:
+A user asks a question in the CLI. A supervisor agent makes an LLM-based routing decision and sends the request to:
 
 - the local library RAG agent
 - the YouTube research agent
@@ -45,14 +45,14 @@ Local Library Agent    YouTube Research Agent
 ## Default Local Stack
 
 - Python 3.12+
-- LangGraph for routing and retries
+- LangGraph for supervisor routing and retries
 - PostgreSQL or SQLite fallback for local storage
 - JSON-stored embeddings for model-agnostic local retrieval
 - PyMuPDF for PDF parsing
 - Typer + Rich for CLI UX
 - FastMCP/MCP for tool exposure
 - LangSmith for optional tracing/evaluation
-- Ollama via its OpenAI-compatible endpoint for local LLM and embedding tasks
+- Ollama or Groq via OpenAI-compatible endpoints for LLM tasks
 
 ## Setup
 
@@ -62,7 +62,7 @@ Local Library Agent    YouTube Research Agent
 4. Install or start Ollama, then pull the models you want to use. Example:
 
 ```bash
-ollama pull llama3.2
+ollama pull llama3.2:3b
 ollama pull nomic-embed-text
 ```
 
@@ -88,6 +88,14 @@ The example file is configured for a local Ollama setup:
 - `EMBEDDING_BASE_URL=http://localhost:11434/v1`
 
 If you want to use OpenAI instead, switch the providers to `openai` and provide the appropriate API keys.
+
+If you want to use Groq for faster text generation, set:
+
+- `LLM_PROVIDER=groq`
+- `LLM_MODEL=<your groq model>`
+- `LLM_API_KEY=<your groq api key>`
+
+`LLM_BASE_URL` is optional for Groq. The app defaults it to `https://api.groq.com/openai/v1`.
 
 Other important values:
 
@@ -132,6 +140,9 @@ Supervisor mode:
 ```bash
 uv run python -m app.main ask "What caused the French Revolution?"
 ```
+
+When an LLM provider is configured, the supervisor uses the model to choose `books`, `youtube`, or `both`.
+If no LLM is configured or the routing response is malformed, it falls back to deterministic routing rules.
 
 Local library only:
 
@@ -199,5 +210,6 @@ Tests use SQLite, fake embeddings when needed, fixture-backed YouTube data, and 
 
 - The YouTube layer avoids scraping and depends on API-backed metadata or local fixtures.
 - Transcript retrieval still depends on either fixtures or an installed transcript dependency.
+- The supervisor falls back to heuristic routing when no LLM is configured for routing.
 - Retrieval uses in-process cosine similarity over stored embeddings, which keeps Ollama model choices flexible but is not optimized for very large libraries.
 - LangSmith tracing only activates when credentials are configured.
