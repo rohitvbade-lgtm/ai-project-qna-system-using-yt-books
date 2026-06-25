@@ -102,6 +102,7 @@ Other important values:
 - `DATABASE_URL`
 - `LLM_MODEL`
 - `EMBEDDING_MODEL`
+- `EMBEDDING_BATCH_SIZE`
 - `YOUTUBE_API_KEY`
 - `LANGSMITH_TRACING`
 - `LANGSMITH_API_KEY`
@@ -132,6 +133,7 @@ uv run python -m app.main ingest-books
 ```
 
 If no embedding provider is enabled, the system still stores chunks and falls back to keyword retrieval.
+If embeddings are enabled, the ingester sends them in batches controlled by `EMBEDDING_BATCH_SIZE` so local Ollama endpoints can be tuned without changing the chunking behavior.
 
 ## Asking Questions
 

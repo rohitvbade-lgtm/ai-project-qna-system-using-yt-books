@@ -41,6 +41,7 @@ class Settings(BaseSettings):
     embedding_api_key: str | None = Field(default=None, alias="EMBEDDING_API_KEY")
     embedding_base_url: str | None = Field(default=None, alias="EMBEDDING_BASE_URL")
     embedding_dimension: int = Field(default=768, alias="EMBEDDING_DIMENSION")
+    embedding_batch_size: int = Field(default=32, alias="EMBEDDING_BATCH_SIZE")
 
     youtube_api_key: str | None = Field(default=None, alias="YOUTUBE_API_KEY")
 

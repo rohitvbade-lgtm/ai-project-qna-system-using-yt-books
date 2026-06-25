@@ -15,7 +15,7 @@ Guidance:
   creators, demonstrations, or transcript-backed video explanations.
 - Prefer both when the user asks to compare, cross-check,
   or blend library evidence with YouTube evidence.
-- Default to books when the user does not clearly require video-based evidence.
+- Default to books when the user does not clearly mention video-based evidence. But if the books don't have the answer, the system should go with YouTube.
 
 Return JSON only with this exact schema:
 {"route_decision":"books|youtube|both","route_reason":"short justification"}
